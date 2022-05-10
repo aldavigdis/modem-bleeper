@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<head>
+  <title>Blepper :: Generate modem sounds, text modulator</title>
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1">
+  <style>
+    @font-face {
+      font-family: 'PermanentMarker-Regular';
+      src: url('PermanentMarker-Regular.woff2') format('woff2'),
+           url('PermanentMarker-Regular.woff') format('woff');
+      font-weight: normal;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    html {
+      background-color: #99f;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      background: #ccc;
+      max-width: 780px;
+      margin: 46px auto;
+      padding-bottom: 46px;
+      box-shadow: 0 0 0 2px #fff, 0 0 0 4px #666;
+    }
+
+    header {
+      padding: 10px 40px;
+      background-color: #fff;
+      border-bottom: 2px solid #666;
+    }
+
+    h1 {
+      font-family: PermanentMarker-Regular;
+      color: #333;
+      text-shadow: #ecff00 4px 4px 0;
+      font-size: 74px;
+      margin: 16px auto;
+    }
+
+    h2 {
+      color: #333;
+      font-family: PermanentMarker-Regular;
+      text-shadow: #ecff00 2px 2px 0;
+      font-size: 32px;
+      line-height: 0.8em;
+      margin-bottom: 24px;
+    }
+
+    label {
+      font-family: 'Courier New', Courier, monospace;
+      text-shadow: #ecff00 1px 1px 0;
+      font-weight: bold;
+    }
+
+    form, section, footer {
+      margin: 40px 40px;
+    }
+
+    textarea {
+      border: 2px solid #333;
+      box-shadow: 0 0 0 2px #ecff00, 0 0 0 4px #333;
+      border-radius: 8px;
+      width: calc( 100% - 80px);
+      padding: 20px;
+      font-size: 16px;
+      font-weight: bold;
+      resize: none;
+      background: #f0f0f0;
+    }
+    
+    textarea:focus {
+      border: 2px solid #333;
+      box-shadow: 0 0 0 2px #ff006d, 0 0 0 4px #333;
+      border-radius: 8px;
+    }
+
+    hr {
+      margin: 80px 0;
+      border-top: 2px solid #333;
+      border-bottom: 2px solid #fff;
+    }
+
+    p {
+      font-family: 'Courier New', Courier, monospace;
+      line-height: 1.2em;
+    }
+
+    section p::before {
+      content: '> ';
+      color: #ff00ec;
+    }
+
+    .textarea-container {
+      margin: 32px 0;
+    }
+    .textarea-container label {
+      display: block;
+      padding-bottom: 8px;
+    }
+
+    .radio-container {
+      margin: 8px 0;
+    }
+
+    .button-container {
+      margin: 32px 0;
+    }
+
+    #bleepit-button {
+      color: #333;
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: bold;
+      font-size: 16px;
+      background-color: #fff;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 8px 24px;
+      cursor: pointer;
+      box-shadow: 0 0 0 2px #ff00ec, 0 0 0 4px #333;
+    }
+
+    #bleepit-button:hover {
+      box-shadow: 0 0 0 2px #ff006d, 0 0 0 4px #333;
+    }
+
+  </style>
+  <script>
+    const ITA2Mappings = {
+      Q: '10111',
+      W: '10011',
+      E: '00001',
+      R: '01010',
+      T: '10000',
+      Y: '10101',
+      U: '00111',
+      I: '00101',
+      O: '11000',
+      P: '10110',
+      A: '00011',
+      S: '00101',
+      D: '01001',
+      F: '01101',
+      G: '11010',
+      H: '10100',
+      J: '01011',
+      K: '01111',
+      L: '10010',
+      Z: '10001',
+      X: '11101',
+      C: '01110',
+      V: '11110',
+      B: '11001',
+      N: '01100',
+      M: '11100',
+    };
+
+    function stringToRTTY(text) {
+      let callContext = new window.AudioContext();
+      let callerFrequencies = [1955, 2125];
+      let baudRate          = 1/50;
+      let bitIndex          = 0;
+      let currentTime       = callContext.currentTime;
+      let callOscillator    = callContext.createOscillator();
+
+      callOscillator.connect(callContext.destination);
+      callOscillator.start();
+      callOscillator.frequency.setValueAtTime(0, currentTime);
+
+      for (var ci = 0; ci < text.length; ci++) {
+        var character = text.charAt(ci).toUpperCase();
+        if (character in ITA2Mappings) {
+          var binaryStr = ITA2Mappings[character];
+        }
+        if (character == ' ') {
+          var binaryStr = '00100';
+        }
+        if (character == "\n") {
+          var binaryStr = '01000000 10';
+        }
+        if (binaryStr) {
+          for (bi = 0; bi < binaryStr.length; bi++) {
+            var frequency = parseInt(callerFrequencies[binaryStr[bi]]);
+            var timing    = currentTime + (bitIndex * baudRate);
+
+            callOscillator.frequency.setValueAtTime(frequency, timing);
+            bitIndex++;
+          }
+        }
+      }
+      var timing = currentTime + (bitIndex * baudRate);
+      callOscillator.stop(timing);
+    }
+
+    function stringToBell103(text) {
+      let callContext = new window.AudioContext();
+      let callerFrequencies = [1070, 1270, 1170] // Bell 103
+      let baudRate          = 1/300; // 300 baud/s
+      let callOscillator = callContext.createOscillator();
+      let leadIn = 1;
+      let textEncoder = new TextEncoder();
+      let currentTime = callContext.currentTime;
+      let bitIndex = 0;
+
+      callOscillator.connect(callContext.destination);
+      callOscillator.start();
+
+      // Start with a lead in, which is a 1 second 1270 Hz tone
+      callOscillator.frequency.setValueAtTime(callerFrequencies[1], currentTime);
+
+      for (byte of textEncoder.encode(text)) {
+        // Start bit is always 0
+        var timing = leadIn + currentTime + (bitIndex * baudRate);
+        callOscillator.frequency.setValueAtTime(callerFrequencies[0], timing);
+        bitIndex++;
+        var binaryStr = byte.toString(2).padStart(8,0);
+
+        // Each "byte" is 8 bits, even if some ASCII and UTF-8 values are 7 bit
+        for (i = 0; i < binaryStr.length; i++) {
+          var frequency = parseInt(callerFrequencies[binaryStr[i]]);
+          var timing    = leadIn + currentTime + (bitIndex * baudRate);
+
+          callOscillator.frequency.setValueAtTime(frequency, timing);
+          bitIndex++;
+        }
+
+        // End bit is always 0
+        var timing = leadIn + currentTime + (bitIndex * baudRate);
+        callOscillator.frequency.setValueAtTime(callerFrequencies[0], timing);
+        bitIndex++;
+      }
+
+      // End by muting the transmission
+      callOscillator.stop(timing);
+    }
+
+    function runSelectedBleeper() {
+      if (document.querySelector('#radio-bell103').checked) {
+        return stringToBell103(document.querySelector('#bleeptext').value);
+      }
+      if (document.querySelector('#radio-rtty').checked) {
+        return stringToRTTY(document.querySelector('#bleeptext').value);
+      }
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Bleeper</h1>
+  </header>
+  <form action="#" method="post">
+    <div class="textarea-container">
+      <label for="bleeptext">Text to transmit</label>
+      <textarea name="text" id="bleeptext" autocomplete="" cols="80" rows="10">I would like a boiled egg, two slices of toast and a cup of tea. Thank you very much, Spike.</textarea><br>
+    </div>
+    <div class="radio-container">
+      <label>
+        <input id="radio-bell103" type="radio" name="protocol" value="bell103" checked="true">
+        Use the Bell 103 modulation
+      </label>
+    </div>
+    <div class="radio-container">
+      <label>
+        <input id="radio-rtty" type="radio" name="protocol" value="rtty">
+        Use Radioteletype (RTTY) modulation
+      </label>
+    </div>
+    <div class="button-container">
+      <input id="bleepit-button" type="button" value="Bleep it!" onclick="runSelectedBleeper();">
+    </div>
+  </form>
+  <hr>
+  <section>
+    <h2>About Bell 103 modulation</h2>
+    <p>
+      The Bell 103 modem dates from 1962 and many conventional modems still
+      fall back on this modulation. The originating station uses 1270 Hz bleeps
+      for mark (or binary 1) and 1070 Hz for space (or binary 0).
+    </p>
+    <p>
+      Its baud rate is 300 bps, with a leading space and a trailing mark after
+      each 8-byte and no parity bit. That is a serial communication convention
+      called 8N1 and is the same one an old-school PC serial port uses.
+    </p>
+    <p>
+      This also means that each "word" is in fact 10 bits, each carrying 8 bits
+      of data, sandwiched between start and stop bits.
+    </p>
+    <p>
+      The Bell 103 modem dates from 1962 and many conventional modems still fall back on this modulation. The originating station uses 1270 Hz bleeps for mark (or binary 1) and 1070 Hz for space (or binary 0). 
+    </p>
+    <p>
+      Most documentation about Bell 103 insist on it being intended for carrying
+      7-bit ASCII, but this implementation supports Unicode UTF-8, so you can
+      even send emoji or non-Latin alphabets like Crylic or Arabic without
+      switching modes.
+    </p>
+  </section>
+  <section>
+    <h2>About Radioteletype (RTTY)</h2>
+    <p>
+      Radioteletype can be heard on shortwave and is used for transmitting
+      weather information by DWD, by radio amateurs and by "diplomats". It is
+      also used over the phone by TDD devices and is probably the most common
+      series of bleeps and bloops you hear on the medium-, long- and shortwave
+      bands on the radio.
+    </p>
+    <p>
+      This implementation of RTTY uses LSB-on-right (big-endian) ITA2
+      Baudot code, which is a character encoding dating all the way back to
+      1924. The baud rate is 50 bps, and we use the European convention of
+      2125 Hz for mark and 1955 Hz for space.
+    </p>
+    <p>
+      We don't support mode shifting to Crylic, weather symbols or other variant
+      codepages, so only the English alphabet is supported here along with
+      spaces and new lines (Carriage Return and Line Feed).
+    </p>
+  </section>
+  <section>
+    <h2>About this app</h2>
+    <p>
+      This is an educational tool intended for demonstrating different
+      frequency shifting data modulation standards. Use it for teaching and
+      learning, sending secret messages to your friends or for generating sci-fi
+      sound effects.
+    </p>
+    <p>
+      There are no plans to implement proper signal processing for receiving
+      messages (RX) and the signals generated by Bleeper have not been tested on
+      real hardware.
+    </p>
+  </section>
+
+  <hr>
+
+  <footer>
+    <p>This is a project by <a href="https://aldavigdis.is/" target="_blank">Alda Vigdís</a>.</p>
+  </footer>
+</body>
